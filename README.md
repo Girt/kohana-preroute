@@ -7,11 +7,19 @@
 Sample use:
 
 >   /**
+
 >   * Set lang preroute
+
 >   */
+
 >   Route::preroute('(<lang>)(/)', array('lang' => 'ru-ru|en-us'), function($params)
+
 >   {
+
 >     I18n::lang($params['lang']);
+
 >   }, array(
+
 >     'lang' => 'ru-ru',
+
 >     ));
