@@ -313,7 +313,6 @@ class Route extends Kohana_Route {
         }
         
         $segment = implode('', $segments);
-        var_dump($segments);
         
         return $segment . $uri;
         
