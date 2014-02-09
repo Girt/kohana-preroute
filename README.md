@@ -9,7 +9,7 @@
 ### Set lang preroute
 
 ```php
-Route::preroute('(<lang>)(/)', array('lang' => 'ru-ru|en-us'), function($params)
+Route::preroute('lang', '(<lang>)(/)', array('lang' => 'ru-ru|en-us'), function($params)
 {
   I18n::lang($params['lang']);
 }, array(
