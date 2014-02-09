@@ -2,6 +2,14 @@
 
 class Route extends Kohana_Route {
 
+    /**
+     * @var  array
+     */
+    protected $_defaults = array(
+        'action' => 'index',
+        'lang'   => 'ru-ru',
+        'host'   => FALSE
+    );
 
     /**
      * Tests if the route matches a given URI. A successful match will return
@@ -56,6 +64,7 @@ class Route extends Kohana_Route {
         {
             // PSR-0: Replace underscores with spaces, run ucwords, then replace underscore
             $params['controller'] = str_replace(' ', '_', ucwords(str_replace('_', ' ', $params['controller'])));
+            // PSR-0: Replace slashes with spaces, run ucwords, then replace slashes
             $params['controller'] = str_replace(' ', '/', ucwords(str_replace('/', ' ', $params['controller'])));
         }
 
@@ -63,6 +72,7 @@ class Route extends Kohana_Route {
         {
             // PSR-0: Replace underscores with spaces, run ucwords, then replace underscore
             $params['directory'] = str_replace(' ', '_', ucwords(str_replace('_', ' ', $params['directory'])));
+            // PSR-0: Replace slashes with spaces, run ucwords, then replace slashes
             $params['directory'] = str_replace(' ', '/', ucwords(str_replace('/', ' ', $params['directory'])));
         }
 
@@ -90,25 +100,53 @@ class Route extends Kohana_Route {
     }
 
     /**
-     * Preroute function:
+     * Provides default values for keys when they are not present. The default
+     * action will always be "index" unless it is overloaded here.
+     *
+     *     $route->defaults(array(
+     *         'controller' => 'welcome',
+     *         'action'     => 'index'
+     *     ));
+     *
+     * If no parameter is passed, this method will act as a getter.
+     *
+     * @param   array   $defaults   key values
+     * @return  $this or array
+     */
+    public function defaults(array $defaults = NULL)
+    {
+        if ($defaults === NULL)
+        {
+            return $this->_defaults;
+        }
+
+        $this->_defaults = $defaults;
+
+        return $this;
+    }
+
+    /**
+     * Preroute to be run before route matching:
      *
      * @throws  Kohana_Exception
-     * @param   array   $segment   URI-segment pattern for processing with preroute
-     * @param   array   $regex   regex patterns for preroute keys
+     * @param   string  $name           route name
+     * @param   string  $uri            URI pattern
+     * @param   array   $regex          regex patterns for route keys
      * @param   array   $callback   callback string, array, or closure
-     * @param   array   $defaults   default values for keys when they are not present
      * @return  $this
      */
-    public static function preroute($segment, $regex, $callback, array $defaults = NULL)
+    public static function preroute($name, $segment, $regex, $callback, array $defaults = NULL)
     {
+        $preroute         = array();
+        $preroute['name'] = $name;
         if (!empty($segment))
         {
-            self::$_preroute['segment'] = $segment;
+            $preroute['segment'] = $segment;
         }
 
         if (!empty($regex))
         {
-            self::$_preroute['regex'] = $regex;
+            $preroute['regex'] = $regex;
         }
 
         if (!is_callable($callback))
@@ -116,54 +154,61 @@ class Route extends Kohana_Route {
             throw new Kohana_Exception('Invalid preroute::callback specified');
         }
 
-        self::$_preroute['callback'] = $callback;
+        $preroute['callback'] = $callback;
 
-        self::$_preroute['default'] = $defaults;
+        $preroute['defaults'] = $defaults;
 
         // Store the compiled regex locally
-        self::$_preroute['route_regex'] = Route::compile($segment, $regex);
-        self::$_preroute['route_regex'] = str_replace('$', '', self::$_preroute['route_regex']);
+        $preroute['route_regex'] = Route::compile($segment, $regex);
+        $preroute['route_regex'] = str_replace('$', '', $preroute['route_regex']);
+
+        self::$_preroutes[$name] = $preroute;
     }
 
     /**
-     * Preroute processing function
+     * Preroute matching to be run before route matching:
      *
      * @throws  Kohana_Exception
-	   * @param   array   $uri     URI pattern
-	   * @param   array   $params     URI parameters
-     * @return  $uri
+     * @param   array   $callback   callback string, array, or closure
+     * @return  $this
      */
     public static function preroute_exec($uri, &$params)
     {
-        if (empty(self::$_preroute))
+        if (count(self::$_preroutes) == 0)
         {
             return $uri;
         }
-        $params = self::$_preroute['default'];
-        if (!preg_match(self::$_preroute['route_regex'], $uri, $matches))
-            return $uri;
-
-        foreach ($matches as $key => $value)
+        foreach (self::$_preroutes as $preroute)
         {
-            if (is_int($key))
+            if (!preg_match($preroute['route_regex'], $uri, $matches))
             {
-                // Skip all unnamed keys
                 continue;
             }
 
-            // Set the value for all matched keys
-            $params[$key] = $value;
-        }
+            $params = $preroute['defaults'];
 
-        call_user_func(self::$_preroute['callback'], $params);
+            foreach ($matches as $key => $value)
+            {
+                if (is_int($key))
+                {
+                    // Skip all unnamed keys
+                    continue;
+                }
 
-        if (mb_strlen($uri) == mb_strlen($matches[0]))
-        {
-            $uri = '';
-        }
-        else
-        {
-            $uri = mb_substr($uri, mb_strlen($matches[0]));
+                // Set the value for all matched keys
+                $params[$key] = $value;
+            }
+
+            call_user_func($preroute['callback'], $params);
+
+            if (mb_strlen($uri) == mb_strlen($matches[0]))
+            {
+                $uri = '';
+            }
+            else
+            {
+                $uri = mb_substr($uri, mb_strlen($matches[0]));
+            }
         }
 
         return $uri;
@@ -172,6 +217,106 @@ class Route extends Kohana_Route {
     /**
      * @var  array  route filters
      */
-    protected static $_preroute = array();
+    protected static $_preroutes = array();
+
+    /**
+     * Generates a URI for the current route based on the parameters given.
+     *
+     *     // Using the "default" route: "users/profile/10"
+     *     $route->uri(array(
+     *         'controller' => 'users',
+     *         'action'     => 'profile',
+     *         'id'         => '10'
+     *     ));
+     *
+     * @param   array   $params URI parameters
+     * @return  string
+     * @throws  Kohana_Exception
+     * @uses    Route::REGEX_GROUP
+     * @uses    Route::REGEX_KEY
+     */
+    public function uri(array $params = NULL)
+    {
+        $uri = parent::uri($params);
+
+        /**
+         * Recursively compiles a portion of a URI specification by replacing
+         * the specified parameters and any optional parameters that are needed.
+         *
+         * @param   string  $portion    Part of the URI specification
+         * @param   boolean $required   Whether or not parameters are required (initially)
+         * @return  array   Tuple of the compiled portion and whether or not it contained specified parameters
+         */
+        $compile = function ($portion, $required, $defaults) use (&$compile, $params) {
+            $missing = array();
+
+            $pattern = '#(?:' . Route::REGEX_KEY . '|' . Route::REGEX_GROUP . ')#';
+            $result  = preg_replace_callback($pattern, function ($matches) use (&$compile, $defaults, &$missing, $params, &$required) {
+                if ($matches[0][0] === '<')
+                {
+                    // Parameter, unwrapped
+                    $param = $matches[1];
+
+                    if (isset($params[$param]))
+                    {
+                        // This portion is required when a specified
+                        // parameter does not match the default
+                        $required = ($required OR !isset($defaults[$param]) OR $params[$param] !== $defaults[$param]);
+
+                        // Add specified parameter to this result
+                        return $params[$param];
+                    }
+
+                    // Add default parameter to this result
+                    if (isset($defaults[$param]))
+                        return $defaults[$param];
+
+                    // This portion is missing a parameter
+                    $missing[] = $param;
+                }
+                else
+                {
+                    // Group, unwrapped
+                    $result = $compile($matches[2], FALSE, $defaults);
+
+                    if ($result[1])
+                    {
+                        // This portion is required when it contains a group
+                        // that is required
+                        $required = TRUE;
+
+                        // Add required groups to this result
+                        return $result[0];
+                    }
+
+                    // Do not add optional groups to this result
+                }
+            }, $portion);
+
+            if ($required AND $missing)
+            {
+                throw new Kohana_Exception(
+                'Required route parameter not passed: :param', array(':param' => reset($missing))
+                );
+            }
+
+            return array($result, $required);
+        };
+
+        $segments = array();
+        foreach (self::$_preroutes as $preroute)
+        {
+
+            list($segment) = $compile($preroute['segment'], TRUE, $preroute['defaults']);
+            
+            $segments[] = $segment;
+        }
+        
+        $segment = implode('', $segments);
+        var_dump($segments);
+        
+        return $segment . $uri;
+        
+    }
 
 }
