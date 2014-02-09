@@ -178,6 +178,9 @@ class Route extends Kohana_Route {
         {
             return $uri;
         }
+        
+        $original_uri = $uri;
+        
         foreach (self::$_preroutes as $preroute)
         {
             if (!preg_match($preroute['route_regex'], $uri, $matches))
@@ -211,6 +214,10 @@ class Route extends Kohana_Route {
             }
         }
 
+        if ($uri != $original_uri && mb_substr($uri, 0, 1) != '/' ){
+            return FALSE;
+        }
+        
         return $uri;
     }
 
