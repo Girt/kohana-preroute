@@ -15,7 +15,10 @@ class Request extends Kohana_Request {
         $uri = trim($request->uri(), '/');
 
         $params = NULL;
-        $uri = Route::preroute_exec($uri, $params);
+        if (($uri    = Route::preroute_exec($uri, $params)) == FALSE)
+        {
+            return NULL;
+        }
 
         $request->uri($uri);
 
