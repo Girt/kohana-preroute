@@ -214,7 +214,7 @@ class Route extends Kohana_Route {
             }
         }
 
-        if ($uri != $original_uri && mb_substr($uri, 0, 1) != '/' ){
+        if ($uri != $original_uri AND $uri != '' AND mb_substr($uri, 0, 1) != '/' ){
             return FALSE;
         }
         
